@@ -113,9 +113,6 @@ def process_audio_files(model_name, device, input_dir, output_dir, language="en"
     with open(metadata_csv_path, mode='w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter='|')
 
-        # Write header row (optional)
-        csv_writer.writerow(["id", "text", "text_cleaned"])
-
         # Write data rows (id | text | text_cleaned)
         for entry in metadata:
             csv_writer.writerow([entry["id"], entry["text"], entry["text_cleaned"]])
