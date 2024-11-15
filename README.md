@@ -1,9 +1,8 @@
 # WhisperX for LJ Speech
 
 Automatically create datasets in [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) format to use for training TTS (
-text-to-speech) models (aka voice cloning).
-LJ Speech is a common standard and is used in TTS frameworks such
-as [Tortoise](https://github.com/neonbjb/tortoise-tts).
+text-to-speech) models. LJ Speech is a common standard and is used in TTS frameworks such
+as [Tortoise](https://github.com/neonbjb/tortoise-tts) or [Piper](https://github.com/rhasspy/piper).
 
 Segments detected in VAD step in [WhisperX](https://github.com/m-bain/whisperX) are used to create short samples in
 `.wav` format and WhisperX ASR is used to
@@ -15,7 +14,7 @@ create the corresponding transcriptions.
 
 ## Usage
 
-1. Put your audio files containing spoken audio into `input_audio`
+1. Put your (possibly long) audio files containing spoken audio into `input_audio`
 2. Run `python create_dataset.py --model base --gpu 0 --input input_audio --output output` if you have a GPU
    available, or on CPU: `python create_dataset.py --model tiny --cpu --input input_audio --output output`
 3. Output:
