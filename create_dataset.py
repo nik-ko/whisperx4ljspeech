@@ -14,18 +14,16 @@ WHISPER_FORMATS = ['wav', 'mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'webm']
 ADDIDTIONAL_FORMATS = ['flac', 'ogg', 'aac', 'wma']
 
 
-def convert_to_temp_wav(input_path):
+def get_wav(input_path):
     """
-    Converts an audio file to a temporary WAV file if it's not already in a supported format.
-    Returns the path to the temporary WAV file.
+    Converts an audio file to a temporary WAV file if not in a supported format
     """
     file_extension = input_path.split('.')[-1].lower()
 
     if file_extension in WHISPER_FORMATS:
-        return input_path, None  # No conversion needed, return original path and no temp file
+        return input_path, None
 
-    # If not supported, convert the file to a temporary WAV
-    print(f"Converting {input_path} to temporary WAV format...")
+    print(f"Converting {input_path} to temporary WAV file...")
     audio = AudioSegment.from_file(input_path)
     temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     audio.export(temp_wav.name, format="wav")
@@ -33,26 +31,23 @@ def convert_to_temp_wav(input_path):
     return temp_wav.name, temp_wav
 
 
-def extract_audio_chunk(audio_segment, start_time, end_time):
-    start_ms = start_time * 1000  # Convert seconds to milliseconds
-    end_ms = end_time * 1000  # Convert seconds to milliseconds
+def extract_audio(audio_segment, start_time, end_time):
+    start_ms = start_time * 1000
+    end_ms = end_time * 1000
 
     return audio_segment[start_ms:end_ms]
 
 
-def process_audio_files(model_name, device, input_dir, output_dir, language="en", gpu_id=0, compute_type="float16"):
-    # Create output directories if they don't exist
-    audio_dir = os.path.join(output_dir, "audio")
+def process_audio_files(model_name, device, input_dir, output_dir, language=None, gpu_id=0, compute_type="float16"):
+    audio_dir = os.path.join(output_dir, "wav")
     if not os.path.exists(audio_dir):
         os.makedirs(audio_dir)
 
     metadata = []
 
-    # Load WhisperX model
     model = whisperx.load_model(model_name, device=device, language=language, compute_type=compute_type,
                                 device_index=gpu_id)
 
-    # Process each audio file in the input directory
     for i, audio_file in enumerate(sorted(os.listdir(input_dir))):
         input_path = os.path.join(input_dir, audio_file)
 
@@ -62,35 +57,32 @@ def process_audio_files(model_name, device, input_dir, output_dir, language="en"
 
         print(f"Processing {input_path}...")
 
-        # Convert unsupported formats to a temporary WAV before processing
-        converted_audio_path, temp_wav_file = convert_to_temp_wav(input_path)
+        converted_audio_path, temp_wav_file = get_wav(input_path)
 
         try:
             audio = whisperx.load_audio(converted_audio_path)
-            result = model.transcribe(audio)
+            result = model.transcribe(audio, chunk_size=10)
 
-            # Load alignment model for precise word-level timestamps
-            model_a, metadata_align = whisperx.load_align_model(language_code=result["language"], device=device)
-            aligned_result = whisperx.align(result["segments"], model_a, metadata_align, audio, device=device)
+            segments = result["segments"]
 
             full_audio_segment = AudioSegment.from_file(converted_audio_path)
 
-            num_segments = len(aligned_result["segments"])
+            num_segments = len(segments)
             print(f"Splitting audio file into {num_segments} chunks...")
 
             # Process each segment detected by WhisperX
-            for j, segment in enumerate(aligned_result["segments"]):
+            for j, segment in enumerate(segments):
                 start_time = segment['start']
                 end_time = segment['end']
-                text = segment['text'].strip()
 
-                # Extract the segmented chunk
-                chunk_audio_segment = extract_audio_chunk(full_audio_segment, start_time, end_time)
+                audio_segment = extract_audio(full_audio_segment, start_time, end_time)
 
                 sentence_id = f"{i + 1:06d}_{j + 1:06d}"
                 sentence_path = os.path.join(audio_dir, f"{sentence_id}.wav")
 
-                chunk_audio_segment.export(sentence_path, format="wav")
+                audio_segment.export(sentence_path, format="wav")
+
+                text = segment["text"]
 
                 metadata.append({
                     "id": sentence_id,
@@ -107,16 +99,11 @@ def process_audio_files(model_name, device, input_dir, output_dir, language="en"
         if device == "cuda":
             torch.cuda.empty_cache()
 
-    # Create metadata.csv file using the csv module
     metadata_csv_path = os.path.join(output_dir, "metadata.csv")
 
     with open(metadata_csv_path, mode='w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter='|')
 
-        # Write header row (optional)
-        csv_writer.writerow(["id", "text", "text_cleaned"])
-
-        # Write data rows (id | text | text_cleaned)
         for entry in metadata:
             csv_writer.writerow([entry["id"], entry["text"], entry["text_cleaned"]])
 
